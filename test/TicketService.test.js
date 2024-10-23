@@ -25,30 +25,37 @@ const ticketTypeRequests = [
     { type: 'INFANT', noOfTickets: 1 }
 ]
 
-describe('different ticket scenarios', () => {
-    const ts = new TicketService()
+describe('TicketService test suite', () => {
     const accountId = 1
+    let ts
+    beforeEach(() => {
+        ts = new TicketService()
+    })
+    // afterEach(() => {
+    //     jest.resetAllMocks()
+    // })
 
-    describe('Types', () => {
+    describe('TicketTypes', () => {
+        const ticketTypeRequests = [
+            { type: 'ADULT', noOfTickets: 2 },
+            { type: 'CHILD', noOfTickets: 1 },
+            { type: 'INFANT', noOfTickets: 1 }
+        ]
         test('purchaseTickets should only accept: Infant, Child and Adult tickets.', () => {
-            const ticketTypeRequests = [
-                { type: 'ADULT', noOfTickets: 2 },
-                { type: 'CHILD', noOfTickets: 1 },
-                { type: 'INFANT', noOfTickets: 1 }
-            ]
 
-            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toBe(void 0)
+            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests))
+                .toStrictEqual({ "cost": 65, "seats": 3 })
         })
 
         test('purchaseTickets should throw error when type is not: Infant, Child and Adult tickets.', () => {
-            const ticketTypeRequests = [
+            const ticketTypeRequests_invalid = [
                 { type: 'ADULT', noOfTickets: 2 },
                 { type: 'CAT', noOfTickets: 1 },
                 { type: 'IANT', noOfTickets: 1 }
             ]
 
             try {
-                ts.purchaseTickets(accountId, ...ticketTypeRequests)
+                ts.purchaseTickets(accountId, ...ticketTypeRequests_invalid)
             } catch (error) {
                 expect(error.message).toBe(('Invalid purchase exception: type must be ADULT, CHILD, or INFANT'))
             }
@@ -56,12 +63,16 @@ describe('different ticket scenarios', () => {
     })
 
     describe('TicketPaymentService', () => {
-        const makePaymentSpy = jest.spyOn(TicketPaymentService.prototype, 'makePayment').mockImplementation()
-
+        const makePaymentSpy = jest.spyOn(TicketPaymentService.prototype, 'makePayment')
+        const ticketTypeRequests = [
+            { type: 'ADULT', noOfTickets: 2 },
+            { type: 'CHILD', noOfTickets: 1 },
+            { type: 'INFANT', noOfTickets: 1 }
+        ]
         test('TicketService calculates cost correctly', () => {
-            const expectedCost = 65
-            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toBe(void 0)
-            expect(makePaymentSpy).toHaveBeenCalledWith(1, expectedCost)
+            // const expectedCost = 65
+            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toStrictEqual({ "cost": 65, "seats": 3 })
+            expect(makePaymentSpy).toHaveBeenCalledWith(1, 65)
         })
 
         test('TicketService handles TicketPaymentService type error for invalid accountId', () => {
@@ -71,6 +82,7 @@ describe('different ticket scenarios', () => {
             } catch (error) {
                 expect(error.message).toBe(('Invalid purchase exception: accountId must be an integer'))
             }
+            // expect(ts.purchaseTickets(invalidAccountId, ...ticketTypeRequests)).toStrictEqual('Invalid purchase exception: accountId must be an integer')
         })
 
         test('TicketService handles TicketPaymentService type error for invalid noOfTickets', () => {
@@ -87,7 +99,7 @@ describe('different ticket scenarios', () => {
         test('TicketService calculates resevations correctly', () => {
             // makePayment should get called with the correct amount to pay
             const seats = 3
-            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toBe(void 0)
+            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toStrictEqual({ "cost": 65, "seats": 3 })
             expect(reserveSeatSpy).toHaveBeenCalledWith(1, seats)
         })
 
@@ -104,14 +116,53 @@ describe('different ticket scenarios', () => {
 
         test('TicketService handles SeatReservationService type error for invalid totalSeatsToAllocate', () => {
 
-            jest.spyOn(TicketPaymentService.prototype, 'makePayment').mockImplementation()
+            jest.spyOn(SeatReservationService.prototype, 'reserveSeat')
+                .mockImplementationOnce(() => { throw new TypeError('totalSeatsToAllocate must be an integer') })
 
             try {
                 ts.purchaseTickets(accountId, ...ticketTypeRequests)
             } catch (error) {
-                expect(error.message).toBe(('Invalid purchase exception: totalSeatsToAllocate must be an integer'))
+                expect(error.message).toBe('Invalid purchase exception: totalSeatsToAllocate must be an integer')
             }
         })
+    })
+
+    describe('Infant/Child rules', () => {
+        test('child and infant tickets cannot be purchased withough an adult', () => {
+            const ticketTypeRequests = [
+                { type: 'ADULT', noOfTickets: 0 },
+                { type: 'CHILD', noOfTickets: 1 },
+                { type: 'INFANT', noOfTickets: 1 }
+            ]
+
+            try {
+                ts.purchaseTickets(accountId, ...ticketTypeRequests)
+            } catch (error) {
+                expect(error.message).toBe('Invalid purchase exception: child and infant tickets cannot be purchased without an adult')
+            }
+        })
+
+        test('infants do not affect price or seat reservation', () => {
+            const ticketTypeRequests = [
+                { type: 'ADULT', noOfTickets: 1 },
+                { type: 'INFANT', noOfTickets: 2 }
+            ]
+            expect(ts.purchaseTickets(accountId, ...ticketTypeRequests)).toStrictEqual({ "cost": 25, "seats": 1 })
+        })
+    })
+
+    test('unable to buy more than than 25 tickets', () => {
+        const ticketTypeRequests = [
+            { type: 'ADULT', noOfTickets: 25 },
+            { type: 'CHILD', noOfTickets: 25 },
+            { type: 'INFANT', noOfTickets: 2 }
+        ]
+        try {
+            ts.purchaseTickets(accountId, ...ticketTypeRequests)
+        } catch (error) {
+            console.log(error)
+            expect(error.message).toBe('Invalid purchase exception: cannot purchase more than 25 tickets')
+        }
     })
 
 })
