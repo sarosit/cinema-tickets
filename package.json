@@ -7,7 +7,7 @@
   },
   "type": "module",
   "scripts": {
-    "test": "jest"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --collectCoverage"
   },
   "devDependencies": {
     "jest": "^29.7.0"
