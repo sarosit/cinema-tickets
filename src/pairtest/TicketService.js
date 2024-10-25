@@ -2,13 +2,12 @@ import TicketTypeRequest from './lib/TicketTypeRequest.js';
 import InvalidPurchaseException from './lib/InvalidPurchaseException.js';
 import SeatReservationService from '../thirdparty/seatbooking/SeatReservationService.js';
 import TicketPaymentService from '../thirdparty/paymentgateway/TicketPaymentService.js';
+import logger from './logger.js';
 
 export default class TicketService {
   /**
    * Should only have private methods other than the one below.
    */
-
-  #requests = []
 
   #priceMapping = {
     infant: 0,
@@ -31,37 +30,39 @@ export default class TicketService {
       const seatsRequired = type === 'INFANT' ? 0 : 1
       return accumulator + seatsRequired * amount
     }, 0)
-    switch (true) {
-      case seats <= 25:
-        return seats
-      default:
-        throw new Error('cannot purchase more than 25 tickets')
-    }
+    if (seats > 25) throw new Error('cannot purchase more than 25 tickets')
+    return seats
   }
 
   #adultPresent = (...ticketTypeRequests) => {
-    let adultPresent
+    let adultPresent = false
     for (const t of ticketTypeRequests) {
-      if (t.type === 'ADULT' && t.noOfTickets > 0 ) adultPresent = true
+      if (t.getTicketType() === 'ADULT' && t.getNoOfTickets() > 0) adultPresent = true
     }
     return adultPresent
   }
 
   purchaseTickets(accountId, ...ticketTypeRequests) {
+    logger.info(`AccountId ${accountId} has made ${ticketTypeRequests.length} ticket requests`)
     try {
+      // Check for adult present and account Id < 0
       if (!this.#adultPresent(...ticketTypeRequests)) {
-        console.log('HERE')
         throw new Error('child and infant tickets cannot be purchased without an adult')
       }
+      if (typeof accountId === 'number' && !accountId > 0) {
+        throw new Error('invalid accountId - must be greater than 0')
+      }
+      // Calculate total cost and seats required
+      const totalAmountToPay = this.#cost(...ticketTypeRequests)
+      const numberOfSeats = this.#seats(...ticketTypeRequests)
+      // Call third party services
       const pay = new TicketPaymentService()
       const seat = new SeatReservationService()
-      ticketTypeRequests.forEach((req) => this.#requests.push(Object.freeze(new TicketTypeRequest(req.type, req.noOfTickets))))
-      const totalAmountToPay = this.#cost(...this.#requests)
-      const numberOfSeats = this.#seats(...this.#requests)
       pay.makePayment(accountId, totalAmountToPay)
       seat.reserveSeat(accountId, numberOfSeats)
-      this.#requests = []
+      // Return a receipt of purchase
       return {
+        accountId: accountId,
         seats: numberOfSeats,
         cost: totalAmountToPay
       }
